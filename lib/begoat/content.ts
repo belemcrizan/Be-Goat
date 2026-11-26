@@ -25,6 +25,8 @@ const webUrl = z
   .max(1200)
   .refine((value) => {
     if (value === "") return true;
+    if (!/^https:\/\/[^/\\?#\s]/i.test(value) || /[\s\\]/.test(value))
+      return false;
     try {
       const url = new URL(value);
       return (
@@ -63,13 +65,81 @@ const note = z.object({
 const distinct = (rows: { id: string }[]) =>
   new Set(rows.map((row) => row.id)).size === rows.length;
 
+export const cards = [
+  { key: "lives", rank: "K", label: "Lives" },
+  { key: "loja", rank: "Q", label: "Loja" },
+  { key: "agenda", rank: "A", label: "Agenda" },
+  { key: "sobre", rank: "J", label: "Sobre" },
+] as const;
+export type CardKey = (typeof cards)[number]["key"];
+export const defaultCardUrls = { lives: "", loja: "", agenda: "", sobre: "" };
+export type CardUrls = typeof defaultCardUrls;
+
+export function cardHref(key: CardKey, urls: CardUrls) {
+  return urls[key] || "/" + key;
+}
+
+export function cardDestinationIssue(urls: CardUrls, origin: string) {
+  const seen = new Set<string>();
+  for (const { key, label } of cards) {
+    const url = new URL(cardHref(key, urls), origin);
+    const pathname = url.pathname.replace(/\/+$/, "");
+    if (urls[key] && url.origin === origin && pathname === "/" + key) {
+      return (
+        "Para usar a página original de " +
+        label +
+        ", deixe o endereço da carta em branco."
+      );
+    }
+    const canonical = url.origin + pathname + url.search + url.hash;
+    if (seen.has(canonical))
+      return (
+        "Cada carta precisa levar a um destino diferente. Confira a carta " +
+        label +
+        "."
+      );
+    seen.add(canonical);
+  }
+  return null;
+}
+
+const cardUrls = z
+  .object({
+    lives: webUrl.default(""),
+    loja: webUrl.default(""),
+    agenda: webUrl.default(""),
+    sobre: webUrl.default(""),
+  })
+  .default(defaultCardUrls);
+
 export const contentSchema = z.object({
+  cardUrls,
   bio: z.string().trim().min(1).max(280),
   sampleSchedule: z.boolean(),
   links: z.array(link).max(32).refine(distinct),
   streams: z.array(stream).max(35).refine(distinct),
   notes: z.array(note).max(20).refine(distinct),
 });
+// Antigas publicações podiam conter endereços abreviados que o navegador tratava como caminhos locais.
+export function parseStoredContent(json: string) {
+  return contentSchema.parse(
+    JSON.parse(json, (key, value: unknown) => {
+      if (
+        key !== "url" ||
+        typeof value !== "string" ||
+        webUrl.safeParse(value).success
+      )
+        return value;
+      try {
+        const repaired = webUrl.safeParse(new URL(value).href);
+        return repaired.success ? repaired.data : "";
+      } catch {
+        return "";
+      }
+    }),
+  );
+}
+
 export type SiteContent = z.infer<typeof contentSchema>;
 export type SocialLink = z.infer<typeof link>;
 export type Stream = z.infer<typeof stream>;
@@ -84,6 +154,7 @@ export const saveSchema = z.object({
   content: contentSchema,
 });
 export const initialContent: SiteContent = {
+  cardUrls: defaultCardUrls,
   bio: "Jogos, conversas e o que mais o chat inventar. Te encontro na próxima live.",
   sampleSchedule: true,
   links: [

@@ -10,7 +10,9 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  cards,
   contentSchema,
+  cardDestinationIssue,
   platforms,
   weekdays,
   type Note,
@@ -21,10 +23,11 @@ import {
   type Stream,
 } from "@/lib/begoat/content";
 
-type Tab = "perfil" | "links" | "streams" | "notes";
+type Tab = "perfil" | "cartas" | "links" | "streams" | "notes";
 type Group = "links" | "streams" | "notes";
 const tabs: { key: Tab; label: string }[] = [
   { key: "perfil", label: "Perfil" },
+  { key: "cartas", label: "Cartas" },
   { key: "links", label: "Links" },
   { key: "streams", label: "Lives" },
   { key: "notes", label: "Recados" },
@@ -244,13 +247,19 @@ export function Editor({ initial }: { initial: Publication }) {
       const target: Tab =
         section === "links" || section === "streams" || section === "notes"
           ? section
-          : "perfil";
+          : section === "cardUrls"
+            ? "cartas"
+            : "perfil";
       setTab(target);
       setError(true);
       const item =
-        typeof index === "number" ? " (item " + (index + 1) + ")" : "";
+        typeof index === "number"
+          ? " (item " + (index + 1) + ")"
+          : section === "cardUrls"
+            ? " · " + (cards.find((c) => c.key === index)?.label ?? "Destino")
+            : "";
       const detail =
-        field === "url"
+        field === "url" || section === "cardUrls"
           ? "Use um endereço https:// completo."
           : "Confira os campos obrigatórios e seus limites.";
       setStatus(
@@ -259,6 +268,16 @@ export function Editor({ initial }: { initial: Publication }) {
           ". " +
           detail,
       );
+      return;
+    }
+    const issue = cardDestinationIssue(
+      parsed.data.cardUrls,
+      window.location.origin,
+    );
+    if (issue) {
+      setTab("cartas");
+      setError(true);
+      setStatus(issue);
       return;
     }
     setBusy(true);
@@ -326,6 +345,37 @@ export function Editor({ initial }: { initial: Publication }) {
                 />
               </Field>
             </>
+          )}
+          {tab === "cartas" && (
+            <section>
+              <h2>Destinos das cartas</h2>
+              <p>
+                Cada carta já abre sua página no site. Para levar o visitante
+                diretamente a outro endereço, cole o link completo. Apague o
+                link para voltar à página original.
+              </p>
+              <div className="card-fields">
+                {cards.map((card) => (
+                  <Field key={card.key} label={card.rank + " · " + card.label}>
+                    <input
+                      type="url"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      aria-label={"Destino de " + card.label}
+                      placeholder={"Página do site: /" + card.key}
+                      maxLength={1200}
+                      value={content.cardUrls[card.key]}
+                      onChange={(e) =>
+                        update("cardUrls", {
+                          ...content.cardUrls,
+                          [card.key]: e.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+                ))}
+              </div>
+            </section>
           )}
           {tab === "links" && (
             <>

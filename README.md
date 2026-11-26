@@ -1,10 +1,10 @@
 # Nati Goat
 
-**begoat** é o endereço do projeto. A página da streamer Nati Goat reúne o retrato oficial, os canais, a próxima transmissão no horário de Brasília, a agenda semanal e o mural. Cada live tem uma ficha com a opção de salvar o evento no calendário.
+A página da streamer **Nati Goat** usa o endereço **begoat**. Na capa, cada carta abre um destino. **K · Lives** reúne a próxima transmissão e os canais, **Q · Loja** abre a loja, **A · Agenda** mostra os dias e horários de Brasília e **J · Sobre** reúne o retrato, a carta Rei de Copas e os recados. Cada transmissão pode ser salva no calendário.
 
 ## Estúdio
 
-Abra **Estúdio** (rota `/admin`) e entre com o usuário `admin` e a senha configurada na hospedagem. O painel permite editar a apresentação, ordenar e adicionar canais, programar lives e publicar recados. **Salvar alterações** publica uma nova revisão em D1. Horários ilustrativos podem ser marcados como exemplos e canais sem URL exibem **Em breve**.
+Abra **Estúdio** (rota `/admin`) e entre com o usuário `admin` e a senha configurada na hospedagem. Na aba **Cartas**, cadastre um endereço HTTPS para substituir o destino de cada carta. Deixe o campo vazio para usar a página do próprio site. Enquanto o endereço da loja aguarda cadastro, a carta abre um aviso. O painel também permite editar a apresentação, ordenar e adicionar canais, programar lives e publicar recados. **Salvar alterações** publica uma nova revisão em D1. Horários ilustrativos podem ser marcados como exemplos e canais sem URL exibem **Em breve**.
 
 A aplicação autentica o administrador por senha. A privacidade da prévia hospedada tem um controle adicional no provedor. O código do site também roda de forma independente em Workers com um banco D1.
 

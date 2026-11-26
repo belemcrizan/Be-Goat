@@ -1,23 +1,36 @@
 import { Link2 } from "lucide-react";
 import type { Platform } from "@/lib/begoat/content";
 
-export function Monogram() {
+export function Ram({ className = "" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 56 32" fill="currentColor" aria-hidden="true">
-      <path d="m1 30 6-28h7l10 16 4-16h7l-6 28h-7L12 14 9 30z" />
-      <path d="M42 2h13l-2 6H42l-6 16h9l2-6h-6l2-6h13l-6 18H33c-4 0-6-3-4-7l5-15c1-4 4-6 8-6z" />
+    <img
+      className={className}
+      src="/brand/carneiro.svg"
+      width="264"
+      height="326"
+      alt=""
+    />
+  );
+}
+
+export function RamOutline() {
+  return (
+    <svg
+      className="card-ram"
+      viewBox="130 262 272 252"
+      fill="none"
+      aria-hidden="true"
+    >
+      <use href="/brand/carneiro.svg#carneiro" />
     </svg>
   );
 }
+
 export function Wordmark() {
   return (
     <span className="wordmark">
-      <span className="brand-monogram">
-        <Monogram />
-      </span>
-      <span>
-        NATI <i>GOAT</i>
-      </span>
+      <Ram />
+      <span>Nati Goat</span>
     </span>
   );
 }
