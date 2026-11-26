@@ -50,8 +50,7 @@ export default async function AdminPage() {
             <div>
               <span className="micro">Nati Goat</span>
               <h2>
-                Estúdio
-                <br />
+                Estúdio <br />
                 <em>da Nati.</em>
               </h2>
             </div>

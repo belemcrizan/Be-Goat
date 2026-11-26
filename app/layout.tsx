@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nati Goat · Lives e canais",
+  title: "Nati Goat · Lives, loja e agenda",
   description:
-    "Acompanhe a programação de lives da Nati Goat e encontre os canais oficiais da streamer.",
-  icons: { icon: "/favicon.svg" },
+    "Escolha uma carta para ver as lives, a loja, a agenda ou conhecer a Nati Goat.",
+  icons: { icon: "/brand/carneiro.svg" },
   robots: { index: false, follow: false },
   openGraph: {
-    title: "Nati Goat · Lives e canais",
-    description: "Programação, canais e novidades da Nati Goat.",
+    title: "Nati Goat · Lives, loja e agenda",
+    description: "Lives, loja, agenda e a história da Nati Goat.",
     type: "website",
     locale: "pt_BR",
   },

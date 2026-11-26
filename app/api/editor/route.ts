@@ -1,4 +1,4 @@
-import { saveSchema } from "@/lib/begoat/content";
+import { cardDestinationIssue, saveSchema } from "@/lib/begoat/content";
 import { authorizeMutation, readBody, result } from "@/lib/begoat/mutations";
 import { publish } from "@/lib/begoat/store";
 
@@ -11,6 +11,11 @@ export async function PUT(req: Request) {
       { error: "Confira os textos, horários e endereços dos links." },
       400,
     );
+  const issue = cardDestinationIssue(
+    parsed.data.content.cardUrls,
+    new URL(req.url).origin,
+  );
+  if (issue) return result({ error: issue }, 400);
   const revision = await publish(parsed.data.revision, parsed.data.content);
   return revision === null
     ? result(

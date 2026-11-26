@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { publication } from "@/db/schema";
 import {
-  contentSchema,
+  parseStoredContent,
   initialContent,
   type Publication,
   type SiteContent,
@@ -16,7 +16,7 @@ export async function readPublication(): Promise<Publication> {
   if (!row) return { revision: 0, content: initialContent };
   return {
     revision: row.revision,
-    content: contentSchema.parse(JSON.parse(row.content)),
+    content: parseStoredContent(row.content),
   };
 }
 
