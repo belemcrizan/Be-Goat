@@ -83,13 +83,8 @@ export const saveSchema = z.object({
     .max(Number.MAX_SAFE_INTEGER - 1),
   content: contentSchema,
 });
-export const emailSchema = z.union([
-  z.literal(""),
-  z.string().trim().email().max(254),
-]);
-
 export const initialContent: SiteContent = {
-  bio: "Puxa uma cadeira e vem pro chat. Aqui você encontra minhas redes e os horários dos nossos próximos encontros ao vivo.",
+  bio: "Jogos, conversas e o que mais o chat inventar. Te encontro na próxima live.",
   sampleSchedule: true,
   links: [
     {

@@ -27,3 +27,41 @@ export function printDay(day: Date, options: Intl.DateTimeFormatOptions) {
     timeZone: "UTC",
   }).format(day);
 }
+
+export interface WeeklySlot {
+  day: number;
+  time: string;
+}
+const clock = new Intl.DateTimeFormat("en-GB", {
+  timeZone: REFERENCE_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+export function timeInBrasilia(now: Date) {
+  return clock.format(now);
+}
+
+export function nextSlot<T extends WeeklySlot>(
+  slots: T[],
+  today: string,
+  currentTime: string,
+) {
+  const dates = slots.map((slot) => {
+    let date = dateInWeek(today, 0, slot.day).toISOString().slice(0, 10);
+    if (date < today || (date === today && slot.time < currentTime))
+      date = dateInWeek(today, 1, slot.day).toISOString().slice(0, 10);
+    return { slot, date };
+  });
+  return (
+    dates.sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) || a.slot.time.localeCompare(b.slot.time),
+    )[0] ?? null
+  );
+}
+
+export function hourLabel(time: string) {
+  return time.replace(":", "h");
+}

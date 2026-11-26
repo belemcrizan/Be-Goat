@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { publication, streamerAccess } from "@/db/schema";
+import { publication } from "@/db/schema";
 import {
   contentSchema,
   initialContent,
@@ -36,19 +36,4 @@ export async function publish(revision: number, value: SiteContent) {
           .where(and(eq(publication.id, 1), eq(publication.revision, revision)))
           .returning({ revision: publication.revision });
   return result[0]?.revision ?? null;
-}
-
-export async function readStreamerEmail() {
-  const [row] = await getDb()
-    .select()
-    .from(streamerAccess)
-    .where(eq(streamerAccess.id, 1));
-  return row?.email ?? "";
-}
-
-export async function writeStreamerEmail(email: string) {
-  await getDb()
-    .insert(streamerAccess)
-    .values({ id: 1, email })
-    .onConflictDoUpdate({ target: streamerAccess.id, set: { email } });
 }
