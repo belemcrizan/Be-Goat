@@ -8,6 +8,13 @@
       "when": 1795667404471,
       "tag": "0000_begoat",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795669264014,
+      "tag": "0001_admin_sessions",
+      "breakpoints": true
     }
   ]
 }

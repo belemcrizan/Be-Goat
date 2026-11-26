@@ -1,10 +1,3 @@
-export function sameAccount(email: string, allowed?: string) {
-  return (
-    !!allowed?.trim() &&
-    email.trim().toLowerCase() === allowed.trim().toLowerCase()
-  );
-}
-
 export function isSameOriginWrite(req: Request) {
   return (
     req.headers.get("origin") === new URL(req.url).origin &&

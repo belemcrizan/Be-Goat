@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { pbkdf2Sync, randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Miniflare } from "miniflare";
@@ -18,6 +19,13 @@ test("publicação, controle de acesso e conflitos no Worker com um D1 isolado",
       contents: await readFile(path.join(root, name)),
     })),
   );
+  const salt = randomBytes(16);
+  const password = randomBytes(20).toString("hex");
+  const verifier = [
+    "v1",
+    salt.toString("hex"),
+    pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex"),
+  ].join(":");
   const runtime = new Miniflare({
     modules,
     modulesRoot: root,
@@ -25,7 +33,7 @@ test("publicação, controle de acesso e conflitos no Worker com um D1 isolado",
     compatibilityFlags: ["nodejs_compat"],
     cf: false,
     d1Databases: ["DB"],
-    bindings: { BEGOAT_OWNER_EMAIL: "owner@example.test" },
+    bindings: { BEGOAT_ADMIN_VERIFIER: verifier },
   });
   t.after(() => runtime.dispose());
   const db = await runtime.getD1Database("DB");
@@ -40,29 +48,20 @@ test("publicação, controle de acesso e conflitos no Worker com um D1 isolado",
   }
 
   const origin = "https://begoat.example";
-  // O teste injeta as identidades que o gateway autenticado entregaria ao Worker.
-  function identity(email) {
-    return email
-      ? {
-          "oai-authenticated-user-id": "test-" + email,
-          "oai-authenticated-user-email": email,
-        }
-      : {};
-  }
-  function put(route, body, email, requestOrigin = origin) {
+  function request(route, method, body, cookie = "", requestOrigin = origin) {
     return runtime.dispatchFetch(origin + route, {
-      method: "PUT",
+      method,
       headers: {
-        ...identity(email),
         origin: requestOrigin,
         "content-type": "application/json",
+        cookie,
       },
       body: JSON.stringify(body),
     });
   }
-  const owner = "owner@example.test";
-  const streamer = "streamer@example.test";
-  const visitor = "visitor@example.test";
+  const login = (guess = password) =>
+    request("/api/session", "POST", { username: "admin", password: guess });
+  let cookie = "";
   const content = {
     ...initialContent,
     bio: "Programação aprovada no ensaio.",
@@ -98,49 +97,57 @@ test("publicação, controle de acesso e conflitos no Worker com um D1 isolado",
   const body = { revision: 0, content };
 
   await t.test(
-    "visitantes leem a página, sem controles de edição",
+    "página pública mostra Nati Goat e o estúdio pede credenciais próprias",
     async () => {
-      const page = await runtime.dispatchFetch(origin);
-      assert.equal(page.status, 200);
-      assert.match(await page.text(), /Meus links/);
-      const admin = await runtime.dispatchFetch(origin + "/admin");
-      assert.match(await admin.text(), /Entrar com ChatGPT/);
-      const ownerPage = await runtime.dispatchFetch(origin + "/admin", {
-        headers: identity(owner),
+      const home = await runtime.dispatchFetch(origin);
+      const html = await home.text();
+      assert.equal(home.status, 200);
+      assert.match(html, /Nati Goat/);
+      assert.match(html, /Agenda de lives/);
+      const panel = await runtime.dispatchFetch(origin + "/admin");
+      const form = await panel.text();
+      assert.ok(form.includes('name="password"'));
+      assert.ok(
+        !form.includes("Entrar com ChatGPT") &&
+          !form.includes("Texto de boas-vindas"),
+      );
+    },
+  );
+  await t.test(
+    "o painel valida as credenciais e entrega um cookie de sessão",
+    async () => {
+      assert.equal((await login("outra-senha")).status, 401);
+      assert.equal(
+        (
+          await request("/api/session", "POST", {
+            username: "visitante",
+            password,
+          })
+        ).status,
+        401,
+      );
+      assert.equal((await request("/api/editor", "PUT", body)).status, 401);
+      const res = await login();
+      assert.equal(res.status, 200);
+      const header = res.headers.get("set-cookie") ?? "";
+      for (const part of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/"])
+        assert.ok(header.includes(part), part);
+      cookie = header.split(";")[0];
+      assert.match(cookie, /^nati_admin=[0-9a-f]{64}$/);
+      const panel = await runtime.dispatchFetch(origin + "/admin", {
+        headers: { cookie },
       });
-      assert.match(await ownerPage.text(), /Texto de boas-vindas/);
+      assert.ok((await panel.text()).includes("Texto de boas-vindas"));
     },
   );
   await t.test(
-    "publicação exige autenticação, permissão e mesma origem",
+    "publica os dados em D1 e rejeita uma revisão concorrente",
     async () => {
-      assert.equal((await put("/api/editor", body)).status, 401);
-      assert.equal((await put("/api/editor", body, visitor)).status, 403);
-      assert.equal(
-        (await put("/api/editor", body, owner, "https://outro.example")).status,
-        403,
-      );
-      assert.equal(
-        (await put("/api/access", { email: streamer }, visitor)).status,
-        403,
-      );
-    },
-  );
-  await t.test(
-    "o responsável autoriza a streamer, que publica para visitantes",
-    async () => {
-      assert.equal(
-        (await put("/api/access", { email: streamer }, owner)).status,
-        200,
-      );
-      const writes = await Promise.all([
-        put("/api/editor", body, streamer),
-        put("/api/editor", body, streamer),
+      const pair = await Promise.all([
+        request("/api/editor", "PUT", body, cookie),
+        request("/api/editor", "PUT", body, cookie),
       ]);
-      assert.deepEqual(writes.map((v) => v.status).sort(), [200, 409]);
-      assert.deepEqual(await writes.find((v) => v.status === 200).json(), {
-        revision: 1,
-      });
+      assert.deepEqual(pair.map((r) => r.status).sort(), [200, 409]);
       const html = await (await runtime.dispatchFetch(origin)).text();
       for (const text of [
         content.bio,
@@ -150,48 +157,92 @@ test("publicação, controle de acesso e conflitos no Worker com um D1 isolado",
         "Até domingo!",
       ])
         assert.ok(html.includes(text), text);
-      assert.ok(!html.includes("PROGRAMAÇÃO DE EXEMPLO"));
+      assert.ok(!html.includes("Programação de exemplo"));
+    },
+  );
+  await t.test("gravação exige a origem do site e campos válidos", async () => {
+    assert.equal(
+      (
+        await request(
+          "/api/editor",
+          "PUT",
+          { revision: 1, content },
+          cookie,
+          "https://outro.example",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request(
+          "/api/editor",
+          "PUT",
+          {
+            revision: 1,
+            content: {
+              ...content,
+              links: [{ ...content.links[0], url: "http://example.test/" }],
+            },
+          },
+          cookie,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          "/api/editor",
+          "PUT",
+          {
+            revision: 1,
+            content: { ...content, links: [], notes: [], streams: [] },
+          },
+          cookie,
+        )
+      ).status,
+      200,
+    );
+    assert.ok(
+      (await (await runtime.dispatchFetch(origin)).text()).includes(
+        "Aguardando nova data",
+      ),
+    );
+  });
+  await t.test("sair revoga a sessão no servidor", async () => {
+    const res = await request("/api/session", "DELETE", {}, cookie);
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("set-cookie").includes("Max-Age=0"));
+    assert.equal(
+      (await request("/api/editor", "PUT", { revision: 2, content }, cookie))
+        .status,
+      401,
+    );
+  });
+  await t.test(
+    "a sessão expira mesmo se o navegador ainda tiver o cookie",
+    async () => {
+      const res = await login();
+      const second = res.headers.get("set-cookie").split(";")[0];
+      await db.prepare("UPDATE admin_sessions SET expires_at = 0").run();
       assert.equal(
-        (await put("/api/access", { email: visitor }, streamer)).status,
-        403,
+        (await request("/api/editor", "PUT", { revision: 2, content }, second))
+          .status,
+        401,
       );
     },
   );
   await t.test(
-    "um formulário inválido ou desatualizado preserva a versão publicada",
+    "tentativas repetidas entram em espera e liberam após a janela",
     async () => {
-      const invalid = {
-        ...content,
-        links: [{ ...content.links[0], url: "http://example.net/" }],
-      };
-      assert.equal(
-        (await put("/api/editor", { revision: 1, content: invalid }, owner))
-          .status,
-        400,
-      );
-      assert.equal((await put("/api/editor", body, owner)).status, 409);
-      const blank = { ...content, links: [], streams: [], notes: [] };
-      assert.equal(
-        (await put("/api/editor", { revision: 1, content: blank }, owner))
-          .status,
-        200,
-      );
-      const html = await (await runtime.dispatchFetch(origin)).text();
-      assert.ok(html.includes("próxima live ainda vai ganhar data"));
-      assert.ok(!html.includes("Recado da streamer"));
-    },
-  );
-  await t.test(
-    "revogar o e-mail encerra a autorização na próxima gravação",
-    async () => {
-      assert.equal(
-        (await put("/api/access", { email: "" }, owner)).status,
-        200,
-      );
-      assert.equal(
-        (await put("/api/editor", { revision: 2, content }, streamer)).status,
-        403,
-      );
+      for (let i = 0; i < 6; i++)
+        assert.equal((await login("incorreta")).status, 401);
+      const blocked = await login();
+      assert.equal(blocked.status, 429);
+      assert.equal(blocked.headers.get("Retry-After"), "900");
+      await db.prepare("UPDATE login_windows SET resets_at = 0").run();
+      assert.equal((await login()).status, 200);
     },
   );
 });

@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import {
   contentSchema,
-  emailSchema,
   platforms,
   weekdays,
   type Note,
@@ -22,14 +21,13 @@ import {
   type Stream,
 } from "@/lib/begoat/content";
 
-type Tab = "perfil" | "links" | "streams" | "notes" | "access";
+type Tab = "perfil" | "links" | "streams" | "notes";
 type Group = "links" | "streams" | "notes";
 const tabs: { key: Tab; label: string }[] = [
   { key: "perfil", label: "Perfil" },
   { key: "links", label: "Links" },
   { key: "streams", label: "Lives" },
   { key: "notes", label: "Recados" },
-  { key: "access", label: "Acesso" },
 ];
 
 function Field({
@@ -178,85 +176,8 @@ async function send(path: string, body: object) {
   }
   return value;
 }
-function AccessForm({
-  initialEmail,
-  onSaved,
-}: {
-  initialEmail: string;
-  onSaved: (email: string) => void;
-}) {
-  const [saved, setSaved] = useState(initialEmail);
-  const [email, setEmail] = useState(initialEmail);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
-  return (
-    <form
-      className="editor-panel"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const value = email.trim().toLowerCase();
-        if (!emailSchema.safeParse(value).success) {
-          setMessage("Informe um e-mail válido.");
-          return;
-        }
-        setPending(true);
-        setMessage("");
-        try {
-          await send("/api/access", { email: value });
-          setEmail(value);
-          setSaved(value);
-          onSaved(value);
-          setMessage(
-            value
-              ? "A conta da streamer foi autorizada."
-              : "O acesso da streamer foi removido.",
-          );
-        } catch (error) {
-          setMessage(
-            error instanceof Error ? error.message : "Não foi possível salvar.",
-          );
-        } finally {
-          setPending(false);
-        }
-      }}
-    >
-      <h2>Acesso da streamer</h2>
-      <p>
-        Autorize o e-mail que ela usa para entrar com ChatGPT. Para revogar o
-        acesso, apague o endereço e salve. Se a prévia for privada, ela também
-        precisa ter acesso à hospedagem.
-      </p>
-      <Field label="E-mail da streamer">
-        <input
-          type="email"
-          maxLength={254}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="nome@exemplo.com"
-        />
-      </Field>
-      <button className="button solid" disabled={pending || email === saved}>
-        <LockKeyhole size={16} />
-        {pending ? "Salvando…" : "Salvar acesso"}
-      </button>
-      <p className="form-status" role="status">
-        {message}
-      </p>
-    </form>
-  );
-}
-
-export function Editor({
-  initial,
-  owner,
-  streamerEmail,
-}: {
-  initial: Publication;
-  owner: boolean;
-  streamerEmail: string;
-}) {
+export function Editor({ initial }: { initial: Publication }) {
   const [saved, setSaved] = useState(initial);
-  const [authorizedEmail, setAuthorizedEmail] = useState(streamerEmail);
   const [content, setContent] = useState(initial.content);
   const [tab, setTab] = useState<Tab>("perfil");
   const [busy, setBusy] = useState(false);
@@ -373,290 +294,279 @@ export function Editor({
       <div className="editor-title">
         <p className="section-kicker">
           <LockKeyhole size={15} />
-          PAINEL
+          NATI GOAT
         </p>
-        <h1>
-          Área da <em>streamer.</em>
-        </h1>
+        <h1>Estúdio da Nati</h1>
       </div>
       <nav className="editor-tabs" aria-label="Seções do painel">
-        {tabs
-          .filter((t) => t.key !== "access" || owner)
-          .map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              aria-pressed={tab === t.key}
-              disabled={busy}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            aria-pressed={tab === t.key}
+            disabled={busy}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </nav>
-      {tab === "access" ? (
-        <AccessForm
-          initialEmail={authorizedEmail}
-          onSaved={setAuthorizedEmail}
-        />
-      ) : (
-        <form onSubmit={save} className="editor-panel">
-          <fieldset className="editor-fields" disabled={busy}>
-            {tab === "perfil" && (
-              <>
-                <h2>Apresentação</h2>
-                <Field label="Texto de boas-vindas">
-                  <textarea
-                    required
-                    rows={4}
-                    maxLength={280}
-                    value={content.bio}
-                    onChange={(e) => update("bio", e.target.value)}
+      <form onSubmit={save} className="editor-panel">
+        <fieldset className="editor-fields" disabled={busy}>
+          {tab === "perfil" && (
+            <>
+              <h2>Apresentação</h2>
+              <Field label="Texto de boas-vindas">
+                <textarea
+                  required
+                  rows={4}
+                  maxLength={280}
+                  value={content.bio}
+                  onChange={(e) => update("bio", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
+          {tab === "links" && (
+            <>
+              <h2>Meus links</h2>
+              <p>
+                Escolha a ordem dos seus canais. Um link sem endereço aparece
+                como “Em breve”.
+              </p>
+              {content.links.map((row, i) => (
+                <EditRow
+                  key={row.id}
+                  name={row.title || "Novo link"}
+                  remove={() => remove("links", row.id)}
+                  first={i === 0}
+                  last={i === content.links.length - 1}
+                  move={(offset) => move("links", i, offset)}
+                >
+                  <Field label="Título">
+                    <input
+                      required
+                      maxLength={80}
+                      value={row.title}
+                      onChange={(e) =>
+                        changeLink(row.id, { title: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label="Plataforma">
+                    <PlatformSelect
+                      value={row.platform}
+                      update={(value) =>
+                        changeLink(row.id, { platform: value })
+                      }
+                    />
+                  </Field>
+                  <Field wide label="Descrição">
+                    <input
+                      maxLength={100}
+                      value={row.description}
+                      onChange={(e) =>
+                        changeLink(row.id, { description: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <UrlField
+                    value={row.url}
+                    update={(value) => changeLink(row.id, { url: value })}
                   />
-                </Field>
-              </>
-            )}
-            {tab === "links" && (
-              <>
-                <h2>Meus links</h2>
-                <p>
-                  Escolha a ordem dos cartões. Um link sem endereço aparece como
-                  “Em breve”.
-                </p>
-                {content.links.map((row, i) => (
-                  <EditRow
-                    key={row.id}
-                    name={row.title || "Novo link"}
-                    remove={() => remove("links", row.id)}
-                    first={i === 0}
-                    last={i === content.links.length - 1}
-                    move={(offset) => move("links", i, offset)}
-                  >
-                    <Field label="Título">
-                      <input
-                        required
-                        maxLength={80}
-                        value={row.title}
-                        onChange={(e) =>
-                          changeLink(row.id, { title: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field label="Plataforma">
-                      <PlatformSelect
-                        value={row.platform}
-                        update={(value) =>
-                          changeLink(row.id, { platform: value })
-                        }
-                      />
-                    </Field>
-                    <Field wide label="Descrição">
-                      <input
-                        maxLength={100}
-                        value={row.description}
-                        onChange={(e) =>
-                          changeLink(row.id, { description: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <UrlField
-                      value={row.url}
-                      update={(value) => changeLink(row.id, { url: value })}
-                    />
-                  </EditRow>
-                ))}
-                <button
-                  type="button"
-                  className="button light add-button"
-                  disabled={content.links.length >= 32}
-                  onClick={() =>
-                    update("links", [
-                      ...content.links,
-                      {
-                        id: crypto.randomUUID(),
-                        title: "",
-                        platform: "Outro",
-                        url: "",
-                        description: "",
-                      },
-                    ])
-                  }
+                </EditRow>
+              ))}
+              <button
+                type="button"
+                className="button light add-button"
+                disabled={content.links.length >= 32}
+                onClick={() =>
+                  update("links", [
+                    ...content.links,
+                    {
+                      id: crypto.randomUUID(),
+                      title: "",
+                      platform: "Outro",
+                      url: "",
+                      description: "",
+                    },
+                  ])
+                }
+              >
+                <Plus size={16} />
+                Adicionar link
+              </button>
+            </>
+          )}
+          {tab === "streams" && (
+            <>
+              <h2>Agenda semanal</h2>
+              <p>
+                Os dias se repetem a cada semana. Use o horário de Brasília.
+              </p>
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={content.sampleSchedule}
+                  onChange={(e) => update("sampleSchedule", e.target.checked)}
+                />
+                Identificar a agenda como exemplo
+              </label>
+              {content.streams.map((row) => (
+                <EditRow
+                  key={row.id}
+                  name={row.title || "Nova live"}
+                  remove={() => remove("streams", row.id)}
                 >
-                  <Plus size={16} />
-                  Adicionar link
-                </button>
-              </>
-            )}
-            {tab === "streams" && (
-              <>
-                <h2>Agenda semanal</h2>
-                <p>
-                  Os dias se repetem a cada semana. Use o horário de Brasília.
-                </p>
-                <label className="check-field">
-                  <input
-                    type="checkbox"
-                    checked={content.sampleSchedule}
-                    onChange={(e) => update("sampleSchedule", e.target.checked)}
+                  <Field wide label="Título da live">
+                    <input
+                      required
+                      maxLength={80}
+                      value={row.title}
+                      onChange={(e) =>
+                        changeStream(row.id, { title: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label="Dia da semana">
+                    <select
+                      value={row.day}
+                      onChange={(e) =>
+                        changeStream(row.id, { day: Number(e.target.value) })
+                      }
+                    >
+                      {weekdays.map((day, i) => (
+                        <option key={day} value={i}>
+                          {day}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Horário">
+                    <input
+                      type="time"
+                      required
+                      value={row.time}
+                      onChange={(e) =>
+                        changeStream(row.id, { time: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label="Plataforma">
+                    <PlatformSelect
+                      value={row.platform}
+                      update={(value) =>
+                        changeStream(row.id, { platform: value })
+                      }
+                    />
+                  </Field>
+                  <UrlField
+                    value={row.url}
+                    update={(value) => changeStream(row.id, { url: value })}
                   />
-                  Identificar a agenda como exemplo
-                </label>
-                {content.streams.map((row) => (
-                  <EditRow
-                    key={row.id}
-                    name={row.title || "Nova live"}
-                    remove={() => remove("streams", row.id)}
-                  >
-                    <Field wide label="Título da live">
-                      <input
-                        required
-                        maxLength={80}
-                        value={row.title}
-                        onChange={(e) =>
-                          changeStream(row.id, { title: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field label="Dia da semana">
-                      <select
-                        value={row.day}
-                        onChange={(e) =>
-                          changeStream(row.id, { day: Number(e.target.value) })
-                        }
-                      >
-                        {weekdays.map((day, i) => (
-                          <option key={day} value={i}>
-                            {day}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Horário">
-                      <input
-                        type="time"
-                        required
-                        value={row.time}
-                        onChange={(e) =>
-                          changeStream(row.id, { time: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field label="Plataforma">
-                      <PlatformSelect
-                        value={row.platform}
-                        update={(value) =>
-                          changeStream(row.id, { platform: value })
-                        }
-                      />
-                    </Field>
-                    <UrlField
-                      value={row.url}
-                      update={(value) => changeStream(row.id, { url: value })}
-                    />
-                  </EditRow>
-                ))}
-                <button
-                  type="button"
-                  className="button light add-button"
-                  disabled={content.streams.length >= 35}
-                  onClick={() =>
-                    update("streams", [
-                      ...content.streams,
-                      {
-                        id: crypto.randomUUID(),
-                        title: "",
-                        day: 0,
-                        time: "20:00",
-                        platform: "Twitch",
-                        url: "",
-                      },
-                    ])
-                  }
+                </EditRow>
+              ))}
+              <button
+                type="button"
+                className="button light add-button"
+                disabled={content.streams.length >= 35}
+                onClick={() =>
+                  update("streams", [
+                    ...content.streams,
+                    {
+                      id: crypto.randomUUID(),
+                      title: "",
+                      day: 0,
+                      time: "20:00",
+                      platform: "Twitch",
+                      url: "",
+                    },
+                  ])
+                }
+              >
+                <Plus size={16} />
+                Adicionar live
+              </button>
+            </>
+          )}
+          {tab === "notes" && (
+            <>
+              <h2>Recados</h2>
+              <p>
+                Publique novidades, avisos e conteúdos extras. Os recados
+                aparecem depois da agenda.
+              </p>
+              {content.notes.map((row, i) => (
+                <EditRow
+                  key={row.id}
+                  name={row.title || "Novo recado"}
+                  remove={() => remove("notes", row.id)}
+                  first={i === 0}
+                  last={i === content.notes.length - 1}
+                  move={(offset) => move("notes", i, offset)}
                 >
-                  <Plus size={16} />
-                  Adicionar live
-                </button>
-              </>
-            )}
-            {tab === "notes" && (
-              <>
-                <h2>Recados</h2>
-                <p>
-                  Publique novidades, avisos e conteúdos extras. Os recados
-                  aparecem depois da agenda.
-                </p>
-                {content.notes.map((row, i) => (
-                  <EditRow
-                    key={row.id}
-                    name={row.title || "Novo recado"}
-                    remove={() => remove("notes", row.id)}
-                    first={i === 0}
-                    last={i === content.notes.length - 1}
-                    move={(offset) => move("notes", i, offset)}
-                  >
-                    <Field wide label="Título">
-                      <input
-                        required
-                        maxLength={80}
-                        value={row.title}
-                        onChange={(e) =>
-                          changeNote(row.id, { title: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field wide label="Mensagem">
-                      <textarea
-                        required
-                        maxLength={1600}
-                        rows={4}
-                        value={row.body}
-                        onChange={(e) =>
-                          changeNote(row.id, { body: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <UrlField
-                      value={row.url}
-                      update={(value) => changeNote(row.id, { url: value })}
+                  <Field wide label="Título">
+                    <input
+                      required
+                      maxLength={80}
+                      value={row.title}
+                      onChange={(e) =>
+                        changeNote(row.id, { title: e.target.value })
+                      }
                     />
-                  </EditRow>
-                ))}
-                <button
-                  type="button"
-                  className="button light add-button"
-                  disabled={content.notes.length >= 20}
-                  onClick={() =>
-                    update("notes", [
-                      ...content.notes,
-                      { id: crypto.randomUUID(), title: "", body: "", url: "" },
-                    ])
-                  }
-                >
-                  <Plus size={16} />
-                  Adicionar recado
-                </button>
-              </>
-            )}
-          </fieldset>
-          <div className="save-bar">
-            <button
-              type="submit"
-              className="button solid"
-              disabled={busy || !dirty}
-            >
-              <Save size={16} />
-              {busy ? "Salvando…" : "Salvar alterações"}
-            </button>
-            <span
-              className={"form-status" + (error ? " error" : "")}
-              role="status"
-            >
-              {!dirty && !error && <Check size={15} />}{" "}
-              {status || (dirty ? "Alterações pendentes" : "Página atualizada")}
-            </span>
-          </div>
-        </form>
-      )}
+                  </Field>
+                  <Field wide label="Mensagem">
+                    <textarea
+                      required
+                      maxLength={1600}
+                      rows={4}
+                      value={row.body}
+                      onChange={(e) =>
+                        changeNote(row.id, { body: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <UrlField
+                    value={row.url}
+                    update={(value) => changeNote(row.id, { url: value })}
+                  />
+                </EditRow>
+              ))}
+              <button
+                type="button"
+                className="button light add-button"
+                disabled={content.notes.length >= 20}
+                onClick={() =>
+                  update("notes", [
+                    ...content.notes,
+                    { id: crypto.randomUUID(), title: "", body: "", url: "" },
+                  ])
+                }
+              >
+                <Plus size={16} />
+                Adicionar recado
+              </button>
+            </>
+          )}
+        </fieldset>
+        <div className="save-bar">
+          <button
+            type="submit"
+            className="button solid"
+            disabled={busy || !dirty}
+          >
+            <Save size={16} />
+            {busy ? "Salvando…" : "Salvar alterações"}
+          </button>
+          <span
+            className={"form-status" + (error ? " error" : "")}
+            role="status"
+          >
+            {!dirty && !error && <Check size={15} />}{" "}
+            {status || (dirty ? "Alterações pendentes" : "Página atualizada")}
+          </span>
+        </div>
+      </form>
     </main>
   );
 }

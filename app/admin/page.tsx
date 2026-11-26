@@ -1,103 +1,69 @@
 import type { Metadata } from "next";
-import { ExternalLink, LockKeyhole } from "lucide-react";
-import { chatGPTSignInPath, chatGPTSignOutPath } from "@/app/chatgpt-auth";
+import { cookies } from "next/headers";
+import { Globe, LockKeyhole } from "lucide-react";
 import { Wordmark } from "@/components/brand";
 import { Editor } from "@/components/editor";
-import { getAccess } from "@/lib/begoat/access";
-import { readPublication, readStreamerEmail } from "@/lib/begoat/store";
+import { LoginForm, Logout } from "@/components/session-controls";
+import { hasAdminSession, sessionCookieName } from "@/lib/begoat/access";
+import { readPublication } from "@/lib/begoat/store";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Área da streamer · begoat",
+  title: "Estúdio · Nati Goat",
   robots: { index: false, follow: false },
 };
 
 export default async function AdminPage() {
-  const { role, user } = await getAccess();
-  const editing = role === "owner" || role === "streamer";
+  const editing = await hasAdminSession(
+    (await cookies()).get(sessionCookieName)?.value,
+  );
   return (
     <div className="admin-page">
-      <header className="topbar">
-        <div className="wrap admin-top">
-          <a className="brand-link" href="/" aria-label="begoat, início">
+      <header className="masthead">
+        <div className="wrap mast-inner">
+          <a href="/" className="brand-link" aria-label="Nati Goat, início">
             <Wordmark />
           </a>
-          <div>
+          <div className="mast-actions">
             <a
               className="admin-link"
               href="/"
               target={editing ? "_blank" : undefined}
               rel="noopener"
             >
-              Ver página{editing && <ExternalLink size={14} />}
+              <Globe size={15} />
+              Ver página
             </a>
-            {user && (
-              <a
-                className="text-link"
-                href={chatGPTSignOutPath("/admin")}
-                target="_top"
-              >
-                Sair
-              </a>
-            )}
+            {editing && <Logout />}
           </div>
         </div>
       </header>
       {editing ? (
-        <Editor
-          initial={await readPublication()}
-          owner={role === "owner"}
-          streamerEmail={role === "owner" ? await readStreamerEmail() : ""}
-        />
+        <Editor initial={await readPublication()} />
       ) : (
-        <main className="login-panel">
-          <img
-            className="login-card"
-            src="/brand/rei-de-copas.webp"
-            width="72"
-            height="102"
-            alt=""
-          />
-          <p className="section-kicker">
-            <LockKeyhole size={15} />
-            ACESSO RESTRITO
-          </p>
-          <h1>
-            Área da <em>streamer.</em>
-          </h1>
-          {user ? (
-            <>
-              <p>
-                Esta conta não tem acesso de edição. Entre com a conta
-                autorizada pelo responsável pelo site.
-              </p>
-              <a
-                className="button solid"
-                href={chatGPTSignOutPath("/admin")}
-                target="_top"
-              >
-                Trocar de conta
-              </a>
-            </>
-          ) : (
-            <>
-              <p>
-                Entre com a conta autorizada para editar seus links, a agenda e
-                os recados.
-              </p>
-              <a
-                className="button solid"
-                href={chatGPTSignInPath("/admin")}
-                target="_top"
-              >
-                <LockKeyhole size={16} />
-                Entrar com ChatGPT
-              </a>
-            </>
-          )}
-          <a className="login-back" href="/">
-            Voltar para a página
-          </a>
+        <main className="login-shell wrap">
+          <section className="login-art">
+            <img
+              src="/brand/retrato.webp"
+              alt="Nati Goat em um vestido vinho."
+            />
+            <div>
+              <span className="micro">Nati Goat</span>
+              <h2>
+                Estúdio
+                <br />
+                <em>da Nati.</em>
+              </h2>
+            </div>
+          </section>
+          <section className="login-panel">
+            <span className="section-kicker">
+              <LockKeyhole size={14} /> Acesso da streamer
+            </span>
+            <h1>Entrar no estúdio</h1>
+            <p>Edite a agenda, os canais e os recados da Nati.</p>
+            <LoginForm />
+          </section>
         </main>
       )}
     </div>

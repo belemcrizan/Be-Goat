@@ -1,55 +1,24 @@
 import { Link2 } from "lucide-react";
 import type { Platform } from "@/lib/begoat/content";
 
+export function Monogram() {
+  return (
+    <svg viewBox="0 0 56 32" fill="currentColor" aria-hidden="true">
+      <path d="m1 30 6-28h7l10 16 4-16h7l-6 28h-7L12 14 9 30z" />
+      <path d="M42 2h13l-2 6H42l-6 16h9l2-6h-6l2-6h13l-6 18H33c-4 0-6-3-4-7l5-15c1-4 4-6 8-6z" />
+    </svg>
+  );
+}
 export function Wordmark() {
   return (
     <span className="wordmark">
-      <img src="/favicon.svg" alt="" width="39" height="39" />
-      begoat<span className="wordmark-point">.</span>
+      <span className="brand-monogram">
+        <Monogram />
+      </span>
+      <span>
+        NATI <i>GOAT</i>
+      </span>
     </span>
-  );
-}
-
-export function Spark({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      aria-hidden="true"
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <path
-        d="M16 1c0 9-4 14-14 15 10 1 14 5 14 15 1-10 6-14 15-15C21 15 17 10 16 1Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-export function Suit({
-  suit,
-}: {
-  suit: "heart" | "diamond" | "club" | "spade";
-}) {
-  const paths = {
-    heart:
-      "M20 13C15-1 0 4 2 17c1 7 12 14 18 20 6-6 17-13 18-20C40 4 25-1 20 13Z",
-    diamond:
-      "M20 2c4 8 10 14 17 18-7 4-13 10-17 18C16 30 10 24 3 20 10 16 16 10 20 2Z",
-    club: "M20 3c-7 0-11 8-6 14-8-5-15 2-12 10 3 7 12 6 16-1-1 5-2 8-5 11h14c-3-3-4-6-5-11 4 7 13 8 16 1 3-8-4-15-12-10C31 11 27 3 20 3Z",
-    spade:
-      "M20 2C14 10 2 16 2 23c0 10 12 12 16 3-1 6-2 9-5 12h14c-3-3-4-6-5-12 4 9 16 7 16-3C38 16 26 10 20 2Z",
-  };
-  return (
-    <svg aria-hidden="true" viewBox="0 0 40 40" fill="none">
-      <path
-        d={paths[suit]}
-        stroke="currentColor"
-        fill="inherit"
-        strokeWidth="1.1"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
@@ -115,41 +84,4 @@ export function PlatformIcon({
     default:
       return <Link2 size={size} aria-hidden="true" />;
   }
-}
-
-export function HeroArt() {
-  return (
-    <div className="hero-art">
-      <div className="art-layout">
-        <span className="card-back" aria-hidden="true">
-          <span />
-        </span>
-        <figure className="portrait-card">
-          <img
-            src="/brand/retrato.webp"
-            width="840"
-            height="1120"
-            fetchPriority="high"
-            alt="begoat sentada em uma poltrona, com vestido vinho."
-          />
-          <span className="photo-index top-index" aria-hidden="true">
-            K<small>♥</small>
-          </span>
-          <span className="photo-index bottom-index" aria-hidden="true">
-            K<small>♥</small>
-          </span>
-        </figure>
-        <img
-          className="signature-card"
-          src="/brand/rei-de-copas.webp"
-          width="330"
-          height="469"
-          alt="Carta Rei de Copas com a cabra coroada, símbolo da begoat."
-        />
-        <Spark className="spark art-spark one" />
-        <Spark className="spark art-spark two" />
-        <Spark className="spark art-spark three" />
-      </div>
-    </div>
-  );
 }

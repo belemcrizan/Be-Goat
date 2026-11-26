@@ -1,7 +1,10 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
+  CalendarPlus,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -9,98 +12,100 @@ import {
   Link2,
   LockKeyhole,
   Menu,
+  Radio,
   X,
 } from "lucide-react";
-import type { SiteContent, SocialLink } from "@/lib/begoat/content";
+import type { SiteContent, SocialLink, Stream } from "@/lib/begoat/content";
 import { weekdays } from "@/lib/begoat/content";
-import { dateInWeek, printDay } from "@/lib/begoat/calendar";
-import { HeroArt, PlatformIcon, Spark, Suit, Wordmark } from "./brand";
+import {
+  dateInWeek,
+  hourLabel,
+  localDay,
+  nextSlot,
+  printDay,
+  timeInBrasilia,
+} from "@/lib/begoat/calendar";
+import { calendarEvent } from "@/lib/begoat/ical";
+import { PlatformIcon, Wordmark } from "./brand";
 
-const suits = ["heart", "diamond", "club", "spade"] as const;
+type Selection =
+  | { type: "stream"; item: Stream; day: string; url: string }
+  | { type: "channel"; item: SocialLink };
 const sections = [
-  { id: "inicio", text: "Início" },
-  { id: "links", text: "Meus links" },
-  { id: "agenda", text: "Agenda" },
+  { id: "inicio", label: "Início" },
+  { id: "agenda", label: "Agenda" },
+  { id: "links", label: "Canais" },
 ];
+const civilDate = (value: string) => new Date(value + "T12:00:00Z");
+const shortDate = (value: string) =>
+  printDay(civilDate(value), { day: "2-digit", month: "short" })
+    .replace(" de ", " ")
+    .replace(".", "");
+const channelURL = (stream: Stream, links: SocialLink[]) =>
+  stream.url ||
+  (stream.platform !== "Outro" &&
+    links.find((link) => link.platform === stream.platform && link.url)?.url) ||
+  "";
+const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 function Header({ hasNotes }: { hasNotes: boolean }) {
-  const [menu, setMenu] = useState(false);
-  const [active, setActive] = useState("inicio");
+  const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
+  const nav = hasNotes
+    ? [...sections, { id: "recados", label: "Mural" }]
+    : sections;
   useEffect(() => {
-    const anchors = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-nav-section]"),
-    );
-    function trackScroll() {
-      const atEnd =
-        window.scrollY > 0 &&
-        window.innerHeight + window.scrollY >=
-          document.documentElement.scrollHeight - 3;
-      const current = atEnd
-        ? anchors.at(-1)
-        : anchors.filter((el) => el.getBoundingClientRect().top <= 150).at(-1);
-      setActive(current?.id ?? "inicio");
-    }
-    trackScroll();
-    window.addEventListener("scroll", trackScroll, { passive: true });
-    return () => window.removeEventListener("scroll", trackScroll);
-  }, []);
-  useEffect(() => {
-    if (!menu) return;
-    function close(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setMenu(false);
+    if (!open) return;
+    function close(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
         toggle.current?.focus();
       }
     }
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
-  }, [menu]);
-  const items = hasNotes
-    ? [...sections, { id: "recados", text: "Recados" }]
-    : sections;
+  }, [open]);
   return (
-    <header className="topbar">
-      <div className="wrap nav-layout">
+    <header className="masthead">
+      <div className="wrap mast-inner">
         <a
-          className="brand-link"
           href="#inicio"
-          aria-label="begoat, início"
-          onClick={() => setMenu(false)}
+          className="brand-link"
+          aria-label="Nati Goat, início"
+          onClick={() => setOpen(false)}
         >
           <Wordmark />
         </a>
         <nav
-          id="main-navigation"
+          id="main-nav"
+          className={"main-nav" + (open ? " expanded" : "")}
           aria-label="Navegação principal"
-          className={"main-nav" + (menu ? " is-open" : "")}
         >
-          {items.map((item) => (
+          {nav.map((item) => (
             <a
               key={item.id}
-              className={active === item.id ? "current" : ""}
-              aria-current={active === item.id ? "location" : undefined}
               href={"#" + item.id}
-              onClick={() => setMenu(false)}
+              onClick={() => setOpen(false)}
             >
-              {item.text}
+              {item.label}
             </a>
           ))}
         </nav>
-        <div className="nav-actions">
+        <div className="mast-actions">
           <a className="admin-link" href="/admin">
-            <LockKeyhole size={15} aria-hidden="true" />
-            <span>Área da streamer</span>
+            <LockKeyhole size={15} />
+            Estúdio
           </a>
           <button
             ref={toggle}
-            className="mobile-menu icon-button"
-            aria-label={menu ? "Fechar menu" : "Abrir menu"}
-            aria-controls="main-navigation"
-            aria-expanded={menu}
-            onClick={() => setMenu(!menu)}
+            type="button"
+            className="icon-button nav-toggle"
+            aria-label={open ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={open}
+            aria-controls="main-nav"
+            onClick={() => setOpen(!open)}
           >
-            {menu ? <X size={21} /> : <Menu size={21} />}
+            {open ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
@@ -108,340 +113,505 @@ function Header({ hasNotes }: { hasNotes: boolean }) {
   );
 }
 
-function SocialCards({ links }: { links: SocialLink[] }) {
-  const [selected, setSelected] = useState<SocialLink | null>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const trigger = useRef<HTMLElement | null>(null);
-  function open(link: SocialLink, element: HTMLElement) {
-    trigger.current = element;
-    setSelected(link);
-    dialog.current?.showModal();
-  }
+function Hero({ content }: { content: SiteContent }) {
+  const twitch = content.links.find(
+    (link) => link.platform === "Twitch" && link.url,
+  );
   return (
-    <section
-      className="social-section wrap"
-      id="links"
-      data-nav-section
-      aria-labelledby="links-title"
-    >
-      <div className="section-heading">
-        <h2 id="links-title">
-          Meus links<span>.</span>
-        </h2>
-        <span className="heading-rule" aria-hidden="true" />
-        <Spark className="heading-spark" />
-      </div>
-      {links.length ? (
-        <div className="link-grid">
-          {links.map((link, index) => {
-            const tileClass = "link-tile color-" + (index % 4);
-            const inner = (
-              <>
-                <span className="tile-emblem">
-                  <PlatformIcon name={link.platform} size={25} />
-                </span>
-                <span className="tile-status">
-                  {link.url ? <ExternalLink size={15} /> : "Em breve"}
-                </span>
-                <span className="tile-word">
-                  <strong>{link.title}</strong>
-                  {link.description && <small>{link.description}</small>}
-                </span>
-                <span className="tile-suit">
-                  <Suit suit={suits[index % 4]} />
-                </span>
-              </>
-            );
-            return link.url ? (
-              <a
-                className={tileClass}
-                key={link.id}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={link.title + ", abrir em nova aba"}
-              >
-                {inner}
+    <section id="inicio" className="hero" aria-labelledby="hero-title">
+      <picture className="hero-photo">
+        <source media="(max-width:600px)" srcSet="/brand/retrato.webp" />
+        <img
+          src="/brand/nati-goat.webp"
+          width="1200"
+          height="1600"
+          alt="Retrato de Nati Goat com um vestido vinho."
+          fetchPriority="high"
+        />
+      </picture>
+      <div className="hero-light" aria-hidden="true" />
+      <div className="wrap hero-shell">
+        <div className="hero-copy">
+          <p className="hero-kicker">
+            <span aria-hidden="true" className="kicker-line" />
+            Live streamer
+          </p>
+          <h1 id="hero-title">
+            <span>Nati</span> <em>Goat</em>
+          </h1>
+          <p className="intro">{content.bio}</p>
+          <div className="hero-actions">
+            {twitch ? (
+              <a className="button primary" href={twitch.url} {...external}>
+                <PlatformIcon name="Twitch" size={18} />
+                Abrir Twitch
               </a>
             ) : (
-              <button
-                type="button"
-                className={tileClass}
-                key={link.id}
-                onClick={(e) => open(link, e.currentTarget)}
-                aria-label={link.title + ", perfil em breve"}
-              >
-                {inner}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="empty-message">
-          Os próximos links vão aparecer por aqui.
-        </p>
-      )}
-      <dialog
-        ref={dialog}
-        className="link-dialog"
-        aria-labelledby="dialog-title"
-        onClose={() => {
-          setSelected(null);
-          trigger.current?.focus({ preventScroll: true });
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            if (
-              e.clientX < rect.left ||
-              e.clientX > rect.right ||
-              e.clientY < rect.top ||
-              e.clientY > rect.bottom
-            )
-              dialog.current?.close();
-          }
-        }}
-      >
-        {selected && (
-          <>
-            <button
-              className="icon-button dialog-close"
-              autoFocus
-              aria-label="Fechar"
-              onClick={() => dialog.current?.close()}
-            >
-              <X size={19} />
-            </button>
-            <div className="dialog-emblem">
-              <PlatformIcon name={selected.platform} size={28} />
-            </div>
-            <h2 id="dialog-title">{selected.title}</h2>
-            <p>O endereço deste perfil ainda será adicionado pela streamer.</p>
-            <a
-              className="button solid"
-              href="#agenda"
-              onClick={() => dialog.current?.close()}
-            >
-              <CalendarDays size={17} />
-              Ver agenda
+              <a className="button primary" href="#agenda">
+                <CalendarDays size={17} />
+                Ver agenda
+              </a>
+            )}
+            <a className="button ghost" href="#links">
+              <Link2 size={16} />
+              Meus canais
             </a>
-          </>
-        )}
-      </dialog>
+          </div>
+        </div>
+        <a
+          className="hero-sigil"
+          href="/brand/rei-de-copas.webp"
+          aria-label="Ver a carta Rei de Copas"
+          {...external}
+        >
+          <img
+            src="/brand/rei-de-copas-mark.png"
+            width="42"
+            height="50"
+            alt=""
+          />
+          <span>Rei de Copas</span>
+        </a>
+      </div>
     </section>
   );
 }
 
-function Schedule({ content, today }: { content: SiteContent; today: string }) {
+function UpNext({
+  next,
+  sample,
+  onOpen,
+}: {
+  next: ReturnType<typeof nextSlot<Stream>>;
+  sample: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <aside className="up-next" aria-label="Próxima transmissão">
+      <div className="wrap next-inner">
+        <div className="next-label">
+          <span className="signal-icon">
+            <Radio size={21} />
+          </span>
+          <span>
+            Próxima live{sample && next && <small>Agenda de exemplo</small>}
+          </span>
+        </div>
+        {next ? (
+          <>
+            <div className="next-title">{next.slot.title}</div>
+            <div className="next-datetime">
+              <CalendarDays size={15} />
+              {shortDate(next.date)}
+              <i aria-hidden="true" />
+              <Clock3 size={15} />
+              {hourLabel(next.slot.time)} <span>BRT</span>
+            </div>
+            <button type="button" className="next-details" onClick={onOpen}>
+              Ver detalhes <span aria-hidden="true">+</span>
+            </button>
+          </>
+        ) : (
+          <span className="next-title">Aguardando nova data</span>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function Channels({
+  links,
+  select,
+}: {
+  links: SocialLink[];
+  select: (choice: Selection) => void;
+}) {
+  return (
+    <aside
+      id="links"
+      className="channels column"
+      aria-labelledby="channels-title"
+    >
+      <div className="block-title">
+        <span className="accent-stroke" aria-hidden="true" />
+        <h2 id="channels-title">Canais da Nati</h2>
+      </div>
+      {links.length ? (
+        <ul className="channels-list">
+          {links.map((link) => {
+            const inner = (
+              <>
+                <span
+                  className={"channel-icon icon-" + link.platform.toLowerCase()}
+                >
+                  <PlatformIcon name={link.platform} size={20} />
+                </span>
+                <span className="channel-name">
+                  <strong>{link.title}</strong>
+                  {link.description && <small>{link.description}</small>}
+                </span>
+                {link.url ? (
+                  <ExternalLink size={15} />
+                ) : (
+                  <span className="pending-label">Em breve</span>
+                )}
+              </>
+            );
+            return (
+              <li key={link.id}>
+                {link.url ? (
+                  <a
+                    className="channel-row"
+                    href={link.url}
+                    {...external}
+                    aria-label={link.title + ", abrir em nova aba"}
+                  >
+                    {inner}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="channel-row"
+                    onClick={() => select({ type: "channel", item: link })}
+                    aria-label={link.title + ", perfil em breve"}
+                  >
+                    {inner}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="empty-message">Os canais oficiais aparecerão aqui.</p>
+      )}
+    </aside>
+  );
+}
+
+function Schedule({
+  content,
+  today,
+  select,
+}: {
+  content: SiteContent;
+  today: string;
+  select: (choice: Selection) => void;
+}) {
   const [week, setWeek] = useState(0);
-  const first = dateInWeek(today, week, 0);
-  const last = dateInWeek(today, week, 6);
-  const month = { month: "short" } as const;
-  const label =
-    printDay(first, { day: "numeric", ...month }) +
-    " – " +
-    printDay(last, { day: "numeric", ...month, year: "numeric" });
-  const streams = [...content.streams].sort(
+  const first = dateInWeek(today, week, 0).toISOString().slice(0, 10),
+    last = dateInWeek(today, week, 6).toISOString().slice(0, 10);
+  const sorted = [...content.streams].sort(
     (a, b) => a.day - b.day || a.time.localeCompare(b.time),
   );
   return (
     <section
-      className="agenda-section"
       id="agenda"
-      data-nav-section
-      aria-labelledby="agenda-title"
+      className="schedule column"
+      aria-labelledby="schedule-title"
     >
-      <div className="wrap">
-        <div className="agenda-head">
-          <div>
-            {content.sampleSchedule && content.streams.length > 0 && (
-              <div className="section-kicker">
-                <CalendarDays size={15} />
-                PROGRAMAÇÃO DE EXEMPLO
-              </div>
-            )}
-            <h2 id="agenda-title">
-              Agenda de lives<span>.</span>
-            </h2>
-          </div>
-          <span className="zone">
-            <Clock3 size={16} />
-            Horário de Brasília
+      <div className="block-title">
+        <span className="accent-stroke" aria-hidden="true" />
+        <h2 id="schedule-title">Agenda de lives</h2>
+      </div>
+      <div className="week-bar">
+        <div className="week-summary">
+          <CalendarDays size={16} />
+          <span aria-live="polite">
+            {shortDate(first)} – {shortDate(last)}{" "}
+            <span className="year">
+              {first.slice(0, 4) === last.slice(0, 4)
+                ? last.slice(0, 4)
+                : "· " + first.slice(0, 4) + "/" + last.slice(0, 4)}
+            </span>
           </span>
         </div>
-        <div className="week-bar">
-          <div>
-            <strong>
-              {week === 0
-                ? "Esta semana"
-                : week === 1
-                  ? "Próxima semana"
-                  : week === -1
-                    ? "Semana passada"
-                    : "Semana selecionada"}
-            </strong>
-            <span aria-live="polite">{label}</span>
-          </div>
-          <div className="week-actions">
-            {week !== 0 && (
-              <button className="week-reset" onClick={() => setWeek(0)}>
-                Hoje
-              </button>
+        <div className="week-buttons">
+          {week !== 0 && (
+            <button
+              type="button"
+              className="week-reset"
+              onClick={() => setWeek(0)}
+            >
+              Hoje
+            </button>
+          )}
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Semana anterior"
+            onClick={() => setWeek((n) => n - 1)}
+          >
+            <ChevronLeft size={17} />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Semana seguinte"
+            onClick={() => setWeek((n) => n + 1)}
+          >
+            <ChevronRight size={17} />
+          </button>
+        </div>
+      </div>
+      {sorted.length ? (
+        <ul className="events">
+          {sorted.map((stream) => {
+            const date = dateInWeek(today, week, stream.day),
+              day = date.toISOString().slice(0, 10);
+            return (
+              <li key={stream.id}>
+                <button
+                  type="button"
+                  className={"event-row" + (day === today ? " is-today" : "")}
+                  aria-label={
+                    "Detalhes de " +
+                    stream.title +
+                    ", " +
+                    weekdays[stream.day] +
+                    ", " +
+                    hourLabel(stream.time)
+                  }
+                  onClick={() =>
+                    select({
+                      type: "stream",
+                      item: stream,
+                      day,
+                      url: channelURL(stream, content.links),
+                    })
+                  }
+                >
+                  <time className="date-tile" dateTime={day}>
+                    <b>{day.slice(-2)}</b>
+                    <small>
+                      {printDay(date, { month: "short" }).replace(".", "")}
+                    </small>
+                  </time>
+                  <span className="event-name">
+                    <small>
+                      {day === today ? "Hoje · " : ""}
+                      {weekdays[stream.day]}
+                    </small>
+                    <strong>{stream.title}</strong>
+                  </span>
+                  <span className="event-channel">
+                    <PlatformIcon name={stream.platform} size={14} />
+                    {stream.platform === "Outro" ? "Live" : stream.platform}
+                  </span>
+                  <span className="event-hour">{hourLabel(stream.time)}</span>
+                  <span className="row-plus" aria-hidden="true">
+                    +
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="empty-message">A próxima live ainda vai ganhar data.</p>
+      )}
+      <p className="schedule-foot">
+        <Clock3 size={14} /> Horário de Brasília
+        {content.sampleSchedule && sorted.length > 0 && (
+          <>
+            <span>·</span> Programação de exemplo
+          </>
+        )}
+      </p>
+    </section>
+  );
+}
+
+function saveCalendar(choice: Extract<Selection, { type: "stream" }>) {
+  const file = new Blob([calendarEvent(choice.item, choice.day, choice.url)], {
+    type: "text/calendar;charset=utf-8",
+  });
+  const address = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = address;
+  a.download = "nati-goat-" + choice.day + ".ics";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(address), 2000);
+}
+
+function Detail({
+  choice,
+  close,
+  sample,
+}: {
+  choice: Selection;
+  close: () => void;
+  sample: boolean;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [downloaded, setDownloaded] = useState(false);
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+  const item = choice.item;
+  return (
+    <dialog
+      ref={ref}
+      className="detail-dialog"
+      aria-labelledby="detail-title"
+      onClose={close}
+      onClick={(e) => {
+        if (e.currentTarget !== e.target) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (
+          e.clientX < rect.left ||
+          e.clientX > rect.right ||
+          e.clientY < rect.top ||
+          e.clientY > rect.bottom
+        )
+          ref.current?.close();
+      }}
+    >
+      <div className="detail-tools">
+        <span className="detail-icon">
+          <PlatformIcon name={item.platform} size={22} />
+        </span>
+        <button
+          type="button"
+          className="icon-button"
+          autoFocus
+          aria-label="Fechar detalhes"
+          onClick={() => ref.current?.close()}
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <h2 id="detail-title">{item.title}</h2>
+      {choice.type === "channel" ? (
+        <p>O endereço deste canal será divulgado aqui pela Nati.</p>
+      ) : (
+        <>
+          <p className="detail-meta">
+            <CalendarDays size={17} />
+            {printDay(civilDate(choice.day), {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
+          </p>
+          <p className="detail-meta">
+            <Clock3 size={17} />
+            {hourLabel(choice.item.time)} · Horário de Brasília
+          </p>
+          {sample && (
+            <p className="detail-note">
+              Esta transmissão faz parte da agenda de exemplo.
+            </p>
+          )}
+          <div className="detail-actions">
+            {choice.url && (
+              <a className="button primary" href={choice.url} {...external}>
+                <ExternalLink size={15} />
+                Abrir canal
+              </a>
             )}
             <button
-              className="icon-button"
-              aria-label="Semana anterior"
-              onClick={() => setWeek((value) => value - 1)}
+              type="button"
+              className="button secondary"
+              onClick={() => {
+                saveCalendar(choice);
+                setDownloaded(true);
+              }}
             >
-              <ChevronLeft size={19} />
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Semana seguinte"
-              onClick={() => setWeek((value) => value + 1)}
-            >
-              <ChevronRight size={19} />
+              {downloaded ? <Check size={15} /> : <CalendarPlus size={16} />}
+              Salvar no calendário
             </button>
           </div>
-        </div>
-        {streams.length ? (
-          <ul className="stream-list">
-            {streams.map((item) => {
-              const day = dateInWeek(today, week, item.day);
-              const url =
-                item.url ||
-                content.links.find(
-                  (link) =>
-                    link.platform === item.platform &&
-                    link.url &&
-                    item.platform !== "Outro",
-                )?.url;
-              return (
-                <li key={item.id}>
-                  <time
-                    className="date-stamp"
-                    dateTime={day.toISOString().slice(0, 10)}
-                  >
-                    <strong>{printDay(day, { day: "2-digit" })}</strong>
-                    <small>{printDay(day, month).replace(".", "")}</small>
-                  </time>
-                  <div className="stream-main">
-                    <span>{weekdays[item.day]}</span>
-                    <h3>{item.title}</h3>
-                  </div>
-                  <span className="stream-time">
-                    <Clock3 size={16} />
-                    {item.time.replace(":", "h")}
-                  </span>
-                  {url ? (
-                    <a
-                      className="stream-platform"
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <PlatformIcon name={item.platform} size={16} />
-                      {item.platform === "Outro" ? "Ver canal" : item.platform}
-                      <ExternalLink size={13} />
-                    </a>
-                  ) : (
-                    <span className="stream-platform">
-                      <PlatformIcon name={item.platform} size={16} />
-                      {item.platform === "Outro" ? "Live" : item.platform}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="empty-message">
-            A próxima live ainda vai ganhar data. Volte em breve!
-          </p>
-        )}
-      </div>
-    </section>
+          <span role="status" className="screen-reader">
+            {downloaded ? "Arquivo de calendário preparado." : ""}
+          </span>
+        </>
+      )}
+    </dialog>
   );
 }
 
 export function HomeView({
   content,
-  today,
+  initialDay,
+  initialTime,
 }: {
   content: SiteContent;
-  today: string;
+  initialDay: string;
+  initialTime: string;
 }) {
+  const [tick, setTick] = useState({ day: initialDay, time: initialTime });
+  const [choice, setChoice] = useState<Selection | null>(null);
+  const trigger = useRef<HTMLElement | null>(null);
+  const next = nextSlot(content.streams, tick.day, tick.time);
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      setTick({ day: localDay(now), time: timeInBrasilia(now) });
+    };
+    update();
+    const timer = window.setInterval(update, 30000);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+  function select(item: Selection) {
+    trigger.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setChoice(item);
+  }
+  function close() {
+    setChoice(null);
+    trigger.current?.focus({ preventScroll: true });
+  }
   return (
     <>
       <a className="skip" href="#conteudo">
         Ir para o conteúdo
       </a>
-      <Header hasNotes={content.notes.length > 0} />
+      <Header hasNotes={!!content.notes.length} />
       <main id="conteudo">
-        <section
-          className="hero"
-          id="inicio"
-          data-nav-section
-          aria-labelledby="hero-title"
-        >
-          <div className="hero-inner wrap">
-            <div className="hero-copy">
-              <p className="eyebrow">
-                <span aria-hidden="true">♥</span> STREAMER &amp; CRIADORA
-              </p>
-              <h1 id="hero-title">
-                <span>Oi, eu sou a</span>{" "}
-                <em>
-                  begoat<span>.</span>
-                </em>
-              </h1>
-              <p className="intro">{content.bio}</p>
-              <div className="hero-actions">
-                <a className="button solid" href="#links">
-                  <Link2 size={18} />
-                  Meus links
-                </a>
-                <a className="button light" href="#agenda">
-                  <CalendarDays size={17} />
-                  Agenda de lives
-                </a>
-              </div>
-            </div>
-            <HeroArt />
-          </div>
-          <div className="hero-rule" aria-hidden="true">
-            <span />
-            <b>♥</b>
-            <span />
-          </div>
-        </section>
-        <SocialCards links={content.links} />
-        <Schedule content={content} today={today} />
+        <Hero content={content} />
+        <UpNext
+          next={next}
+          sample={content.sampleSchedule}
+          onOpen={() => {
+            if (next)
+              select({
+                type: "stream",
+                item: next.slot,
+                day: next.date,
+                url: channelURL(next.slot, content.links),
+              });
+          }}
+        />
+        <div className="wrap programming">
+          <Schedule content={content} today={tick.day} select={select} />
+          <Channels links={content.links} select={select} />
+        </div>
         {content.notes.length > 0 && (
           <section
-            className="notes-section wrap"
+            className="mural wrap"
             id="recados"
-            data-nav-section
-            aria-labelledby="notes-title"
+            aria-labelledby="mural-title"
           >
-            <div className="section-heading">
-              <h2 id="notes-title">
-                Recados<span>.</span>
-              </h2>
-              <span className="heading-rule" aria-hidden="true" />
+            <div className="block-title">
+              <span className="accent-stroke" aria-hidden="true" />
+              <h2 id="mural-title">Mural da Nati</h2>
             </div>
-            <div className="note-list">
+            <div className="notes">
               {content.notes.map((note) => (
                 <article key={note.id}>
                   <h3>{note.title}</h3>
                   <p>{note.body}</p>
                   {note.url && (
-                    <a
-                      className="text-link"
-                      href={note.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
+                    <a className="text-link" href={note.url} {...external}>
                       Saiba mais <ExternalLink size={14} />
                     </a>
                   )}
@@ -451,24 +621,24 @@ export function HomeView({
           </section>
         )}
       </main>
-      <footer className="page-footer">
+      <footer className="footer">
         <div className="wrap">
           <a
             className="brand-link"
             href="#inicio"
-            aria-label="begoat, voltar ao início"
+            aria-label="Nati Goat, voltar ao início"
           >
             <Wordmark />
           </a>
-          <span className="footer-suits" aria-hidden="true">
-            ♠ <i>♥</i> ♣ <i>♦</i>
-          </span>
-          <a href="/admin">
+          <a className="footer-studio" href="/admin">
             <LockKeyhole size={14} />
-            Área da streamer
+            Estúdio da Nati
           </a>
         </div>
       </footer>
+      {choice && (
+        <Detail choice={choice} close={close} sample={content.sampleSchedule} />
+      )}
     </>
   );
 }
